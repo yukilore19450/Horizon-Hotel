@@ -25,10 +25,10 @@ $roomPrices = [
 ];
 
 try {
-    $dbRooms = $pdo->query("SELECT room_title, price_per_night FROM rooms")->fetchAll(PDO::FETCH_ASSOC);
+    $dbRooms = $pdo->query("SELECT room_name, price_per_night FROM rooms")->fetchAll(PDO::FETCH_ASSOC);
     foreach ($dbRooms as $row) {
-        if (!empty($row['room_title'])) {
-            $roomPrices[$row['room_title']] = (float) $row['price_per_night'];
+        if (!empty($row['room_name'])) {
+            $roomPrices[$row['room_name']] = (float) $row['price_per_night'];
         }
     }
 } catch (Throwable $e) {
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
         $checkOut = trim($_POST['check_out'] ?? '');
         $adults = trim($_POST['adults'] ?? '1 Adult');
         $children = trim($_POST['children'] ?? 'No Child');
-        $paymentMethod = trim($_POST['payment_method'] ?? 'Pay at Front Desk (Demo)');
+        $paymentMethod = trim($_POST['payment_method'] ?? 'Pay at Hotel');
         $paymentRef = trim($_POST['payment_reference'] ?? '');
         $guestName = $loggedInUser ?: 'Guest';
 
@@ -54,10 +54,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
             'Demo E-Wallet',
             'Demo Bank Transfer',
             'Demo Voucher',
-            'Pay at Front Desk (Demo)'
+            'Pay at Hotel'
         ];
         if (!in_array($paymentMethod, $allowedMethods, true)) {
-            $paymentMethod = 'Pay at Front Desk (Demo)';
+            $paymentMethod = 'Pay at Hotel';
         }
 
         if ($roomTitle === '' || $checkIn === '' || $checkOut === '') {
@@ -69,11 +69,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
             $nightlyRate = (float) ($roomPrices[$roomTitle] ?? 0);
             $totalAmount = $nights * $nightlyRate;
 
-            if ($paymentMethod === 'Pay at Front Desk (Demo)') {
-                $paymentStatus = 'Demo - Pending';
-                $paymentRef = 'DEMO-DESK-' . strtoupper(substr(md5(uniqid('', true)), 0, 5));
+            if ($paymentMethod === 'Pay at Hotel') {
+                $paymentStatus = 'Pending';
+                $paymentRef = 'HOTEL-DESK';
             } else {
-                $paymentStatus = 'Demo - Simulated';
+                $paymentStatus = 'Paid';
                 if ($paymentRef === '') {
                     $paymentRef = 'DEMO-' . strtoupper(substr(md5(uniqid('', true)), 0, 8));
                 }
@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Horizon Hotel - Academic Reservation Demo</title>
+<title>Horizon Hotel - Home</title>
 <style>
   :root {
     --bg-dark: #121c2b;
@@ -205,20 +205,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
     font-weight: bold;
     color: var(--gold);
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .demo-header-pill {
-    font-size: 11px;
-    padding: 3px 9px;
-    border-radius: 999px;
-    border: 1px solid rgba(248, 208, 112, 0.6);
-    background: rgba(248, 208, 112, 0.12);
-    color: var(--gold);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
   }
 
   nav {
@@ -722,16 +708,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
 
   .modal-content h2 {
     color: var(--gold);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
 
   .demo-notice {
-    background: rgba(248, 208, 112, 0.12);
-    border: 1px dashed rgba(248, 208, 112, 0.55);
+    background: rgba(248, 208, 112, 0.1);
+    border: 1px dashed rgba(248, 208, 112, 0.45);
     color: var(--gold);
     font-size: 12px;
-    line-height: 1.45;
-    padding: 9px 12px;
+    line-height: 1.4;
+    padding: 8px 12px;
     border-radius: 10px;
     margin-bottom: 14px;
   }
@@ -927,7 +913,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
   .receipt-subtitle {
     font-size: 13px;
     color: #94a3b8;
-    margin-bottom: 14px;
+    margin-bottom: 18px;
   }
 
   .receipt-ticket {
@@ -1070,7 +1056,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
 </div>
 
 <header>
-  <div class="logo">Horizon Hotel <span class="demo-header-pill">Demo Prototype</span></div>
+  <div class="logo">Horizon Hotel</div>
   <nav>
     <a href="#home">Home</a>
     <a href="#rooms">Rooms</a>
@@ -1124,11 +1110,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
   </section>
 
   <footer>
-    <p>&copy; 2026 Horizon Hotel &bull; Academic Web System Prototype (No real transactions processed).</p>
+    <p>&copy; 2026 Horizon Hotel. All rights reserved.</p>
   </footer>
 </main>
 
-<!-- Room Detail Modal -->
 <div class="modal-overlay" id="roomDetailModal">
   <div class="modal-content">
     <button class="close-btn" onclick="closeDetailModal()">&times;</button>
@@ -1147,15 +1132,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
   </div>
 </div>
 
-<!-- Simulated Demo Booking Modal -->
 <div class="modal-overlay" id="bookingModal">
   <div class="modal-content">
     <button class="close-btn" onclick="closeBookingModal()">&times;</button>
-    <h2>Simulated Room Booking</h2>
+    <h2>Book Your Stay</h2>
     <p id="modalRoomName" style="margin-bottom: 12px; color: #ccc; font-size: 14px;"></p>
 
     <div class="demo-notice">
-      <strong>Demo Mode Notice:</strong> This is a student project simulation. Do not enter real financial account numbers or passwords.
+      <strong>Demo Payment Mode:</strong> Academic simulation only — no real money or personal payment credentials are collected.
     </div>
 
     <form method="POST" action="Hpage.php" id="bookingForm">
@@ -1196,7 +1180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
         </div>
       </div>
 
-      <label>Select Simulated Payment Option</label>
+      <label>Select Demo Payment Method</label>
       <div class="payment-grid" id="paymentGrid">
         <button type="button" class="pay-option selected" data-method="Demo E-Wallet" onclick="selectPaymentMethod('Demo E-Wallet', this)">
           <span class="pay-badge ewallet">EW</span>
@@ -1222,18 +1206,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
           </span>
         </button>
 
-        <button type="button" class="pay-option" data-method="Pay at Front Desk (Demo)" onclick="selectPaymentMethod('Pay at Front Desk (Demo)', this)">
+        <button type="button" class="pay-option" data-method="Pay at Hotel" onclick="selectPaymentMethod('Pay at Hotel', this)">
           <span class="pay-badge hotel">HH</span>
           <span class="pay-option-text">
             <strong>Pay at Hotel</strong>
-            <span>Simulated Check-in</span>
+            <span>Settle at Front Desk</span>
           </span>
         </button>
       </div>
 
       <div class="payment-box" id="paymentRefGroup">
-        <p id="paymentHint">Auto-generated test confirmation code for this demo reservation:</p>
-        <label id="paymentRefLabel">Simulated Reference Code</label>
+        <p id="paymentHint">Auto-generated demo transaction reference:</p>
+        <label id="paymentRefLabel">Demo Reference Code</label>
         <div class="demo-ref-row">
           <input type="text" name="payment_reference" id="paymentReference" readonly>
           <button type="button" class="btn-regen" onclick="generateDemoRef()">New Code</button>
@@ -1250,25 +1234,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
           <span id="summaryNights">0 nights</span>
         </div>
         <div class="summary-row total">
-          <span>Simulated Total</span>
+          <span>Total Amount</span>
           <span id="summaryTotal">₱0.00</span>
         </div>
       </div>
 
-      <button type="submit" class="modal-btn-primary" id="confirmPayBtn">Simulate Payment &amp; Book</button>
+      <button type="submit" class="modal-btn-primary" id="confirmPayBtn">Confirm &amp; Pay Now (Demo)</button>
     </form>
   </div>
 </div>
 
-<!-- Styled Demo Receipt Modal -->
 <?php if ($receiptData): ?>
 <div class="modal-overlay active" id="receiptModal">
   <div class="modal-content receipt-modal">
     <button class="close-btn" onclick="closeReceiptModal()">&times;</button>
     <div class="receipt-icon">&#10003;</div>
-    <div class="receipt-hotel-name">Horizon Hotel &bull; Demo Receipt</div>
-    <h2 style="margin-bottom: 4px;">Simulated Booking Confirmed</h2>
-    <p class="receipt-subtitle">Academic Prototype Summary (No real funds charged)</p>
+    <div class="receipt-hotel-name">Horizon Hotel</div>
+    <h2 style="margin-bottom: 4px;">Reservation Confirmed</h2>
+    <p class="receipt-subtitle">Official Booking &amp; Payment Summary</p>
 
     <div class="receipt-ticket">
       <div class="receipt-line">
@@ -1296,28 +1279,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
         <strong><?= (int) $receiptData['nights'] ?> night<?= $receiptData['nights'] === 1 ? '' : 's' ?> &bull; <?= htmlspecialchars($receiptData['guests']) ?></strong>
       </div>
       <div class="receipt-line">
-        <span>Demo Method</span>
+        <span>Payment Method</span>
         <strong><?= htmlspecialchars($receiptData['payment_method']) ?></strong>
       </div>
       <div class="receipt-line">
-        <span>Demo Code</span>
+        <span>Transaction Ref</span>
         <strong><?= htmlspecialchars($receiptData['payment_reference']) ?></strong>
       </div>
       <div class="receipt-line">
-        <span>Booking Status</span>
-        <span class="status-pill <?= $receiptData['payment_status'] === 'Demo - Simulated' ? 'paid' : 'pending' ?>">
+        <span>Payment Status</span>
+        <span class="status-pill <?= $receiptData['payment_status'] === 'Paid' ? 'paid' : 'pending' ?>">
           <?= htmlspecialchars($receiptData['payment_status']) ?>
         </span>
       </div>
 
       <div class="receipt-total-bar">
-        <span>Simulated Total</span>
+        <span>Total Amount</span>
         <span>₱<?= number_format((float) $receiptData['total_amount'], 2) ?></span>
       </div>
     </div>
 
     <div class="receipt-actions">
-      <button type="button" class="btn-secondary-gold" onclick="window.print()">Print Summary</button>
+      <button type="button" class="btn-secondary-gold" onclick="window.print()">Print Receipt</button>
       <button type="button" class="modal-btn-primary" onclick="closeReceiptModal()">Done</button>
     </div>
   </div>
@@ -1385,7 +1368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
       category: "standard",
       description: "Spacious accommodations featuring two comfortable double or single beds, an expanded seating area, and modern amenities ideal for shared travel.",
       price: 13000,
-      image: "Twin.png",
+      image: "twin.png",
       amenities: ["2 Queen Size Beds", "1 Modern Bathroom", "Expanded Seating Area", "High-Speed Wi-Fi", "Work Desk", "Daily Housekeeping"]
     },
     {
@@ -1622,18 +1605,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
       btnEl.classList.add('selected');
     }
 
-    if (method === 'Pay at Front Desk (Demo)') {
+    if (method === 'Pay at Hotel') {
       paymentRefGroup.style.display = 'none';
       paymentRefInput.value = '';
-      confirmPayBtn.textContent = 'Confirm Demo Reservation';
+      confirmPayBtn.textContent = 'Confirm Reservation';
     } else {
       paymentRefGroup.style.display = 'block';
-      paymentHintEl.textContent = `Simulated ${method} test code (no real account needed):`;
-      paymentRefLabelEl.textContent = 'Simulated Confirmation Code';
+      paymentHintEl.textContent = `Auto-generated ${method} transaction reference:`;
+      paymentRefLabelEl.textContent = 'Demo Reference Code';
       if (!paymentRefInput.value) {
         generateDemoRef();
       }
-      confirmPayBtn.textContent = 'Simulate Payment & Book';
+      confirmPayBtn.textContent = 'Confirm & Pay Now (Demo)';
     }
   }
 
