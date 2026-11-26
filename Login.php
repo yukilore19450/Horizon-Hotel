@@ -3,30 +3,68 @@ session_start();
 require 'db.php';
 
 $error = '';
+$success = '';
 $registered = isset($_GET['registered']);
 $loginSuccessUser = null;
+$mode = $_POST['mode'] ?? 'login';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim($_POST['name'] ?? '');
-    $password = $_POST['password'] ?? '';
+    if ($mode === 'reset_password') {
+        $loginInput = trim($_POST['reset_login'] ?? '');
+        $newPassword = $_POST['new_password'] ?? '';
+        $confirmPassword = $_POST['confirm_password'] ?? '';
 
-    if ($name === '' || $password === '') {
-        $error = 'Please enter your name and password.';
-    } else {
-        $stmt = $pdo->prepare(
-    "SELECT id, full_name, password_hash FROM users WHERE full_name = :login OR email = :login LIMIT 1"
-);
-$stmt->execute(['login' => $name]);
-        $user = $stmt->fetch();
-
-        if (!$user || !password_verify($password, $user['password_hash'])) {
-            $error = 'Invalid name or password.';
+        if ($loginInput === '' || $newPassword === '' || $confirmPassword === '') {
+            $error = 'Please fill in all reset fields.';
+        } elseif (strlen($newPassword) < 6) {
+            $error = 'New password must be at least 6 characters.';
+        } elseif ($newPassword !== $confirmPassword) {
+            $error = 'New password and confirmation do not match.';
         } else {
-            session_regenerate_id(true);
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['user_name'] = $user['full_name'];
-            header("Location: Hpage.php");
-            exit;
+            $stmt = $pdo->prepare(
+                "SELECT id FROM users WHERE full_name = :login OR email = :login LIMIT 1"
+            );
+            $stmt->execute(['login' => $loginInput]);
+            $user = $stmt->fetch();
+
+            if (!$user) {
+                $error = 'No account found with that name or email.';
+            } else {
+                $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+                $update = $pdo->prepare(
+                    "UPDATE users SET password_hash = :password_hash WHERE id = :id"
+                );
+                $update->execute([
+                    'password_hash' => $newHash,
+                    'id' => $user['id'],
+                ]);
+
+                $success = 'Password updated. Please sign in with your new password.';
+                $mode = 'login';
+            }
+        }
+    } else {
+        $name = trim($_POST['name'] ?? '');
+        $password = $_POST['password'] ?? '';
+
+        if ($name === '' || $password === '') {
+            $error = 'Please enter your name and password.';
+        } else {
+            $stmt = $pdo->prepare(
+                "SELECT id, full_name, password_hash FROM users WHERE full_name = :login OR email = :login LIMIT 1"
+            );
+            $stmt->execute(['login' => $name]);
+            $user = $stmt->fetch();
+
+            if (!$user || !password_verify($password, $user['password_hash'])) {
+                $error = 'Invalid name or password.';
+            } else {
+                session_regenerate_id(true);
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['user_name'] = $user['full_name'];
+                header("Location: Hpage.php");
+                exit;
+            }
         }
     }
 }
@@ -327,17 +365,22 @@ $stmt->execute(['login' => $name]);
 <div class="page">
   <div class="card">
     <div class="lock <?= $loginSuccessUser ? 'unlocked' : '' ?>" id="lockIcon"></div>
-    <h1>Login</h1>
+    <h1 id="authTitle"><?= $mode === 'reset_password' ? 'Reset Password' : 'Login' ?></h1>
 
     <?php if ($registered): ?>
       <div class="msg-success">Account created. Please sign in.</div>
+    <?php endif; ?>
+
+    <?php if ($success !== ''): ?>
+      <div class="msg-success"><?= htmlspecialchars($success) ?></div>
     <?php endif; ?>
 
     <?php if ($error !== ''): ?>
       <div class="msg-error"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
 
-    <form id="loginForm" action="Login.php" method="POST">
+    <form id="loginForm" action="Login.php" method="POST" style="display: <?= $mode === 'reset_password' ? 'none' : 'block' ?>;">
+      <input type="hidden" name="mode" value="login">
       <div class="input-group">
         <input type="text" name="name" id="name" placeholder="Name" value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" required autocomplete="off">
       </div>
@@ -358,12 +401,36 @@ $stmt->execute(['login' => $name]);
         </button>
       </div>
 
-      <p class="forgot-link"><a href="Register.php">Forgot password?</a></p>
+      <p class="forgot-link"><a href="#" id="openResetLink">Forgot password?</a></p>
 
       <button type="submit" id="submitBtn">
         <span class="btn-text">SIGN IN</span>
         <div class="spinner"></div>
       </button>
+    </form>
+
+    <form id="resetForm" action="Login.php" method="POST" style="display: <?= $mode === 'reset_password' ? 'block' : 'none' ?>;">
+      <input type="hidden" name="mode" value="reset_password">
+      <div class="input-group">
+        <input type="text" name="reset_login" id="resetLogin" placeholder="Full Name or Email" value="<?= htmlspecialchars($_POST['reset_login'] ?? '') ?>" required autocomplete="off">
+      </div>
+
+      <div class="input-group">
+        <input type="password" name="new_password" id="newPassword" placeholder="New Password (min. 6 chars)" required>
+      </div>
+
+      <div class="input-group">
+        <input type="password" name="confirm_password" id="confirmPassword" placeholder="Confirm New Password" required>
+      </div>
+
+      <button type="submit" id="resetSubmitBtn">
+        <span class="btn-text">UPDATE PASSWORD</span>
+        <div class="spinner"></div>
+      </button>
+
+      <p class="forgot-link" style="text-align: center; margin-top: 12px; margin-bottom: 0;">
+        <a href="#" id="backToLoginLink">Back to Login</a>
+      </p>
     </form>
 
     <p class="signup-link"><small>Don't have an account? <a href="Register.php">Sign up</a></small></p>
@@ -381,6 +448,34 @@ $stmt->execute(['login' => $name]);
     passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
     eyeOpen.style.display = isPassword ? 'none' : 'block';
     eyeClosed.style.display = isPassword ? 'block' : 'none';
+  });
+
+  const loginForm = document.getElementById('loginForm');
+  const resetForm = document.getElementById('resetForm');
+  const authTitle = document.getElementById('authTitle');
+  const openResetLink = document.getElementById('openResetLink');
+  const backToLoginLink = document.getElementById('backToLoginLink');
+
+  openResetLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    loginForm.style.display = 'none';
+    resetForm.style.display = 'block';
+    authTitle.textContent = 'Reset Password';
+  });
+
+  backToLoginLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    resetForm.style.display = 'none';
+    loginForm.style.display = 'block';
+    authTitle.textContent = 'Login';
+  });
+
+  loginForm.addEventListener('submit', () => {
+    document.getElementById('submitBtn').classList.add('loading');
+  });
+
+  resetForm.addEventListener('submit', () => {
+    document.getElementById('resetSubmitBtn').classList.add('loading');
   });
 
   const lockIcon = document.getElementById('lockIcon');
