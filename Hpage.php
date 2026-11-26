@@ -11,7 +11,7 @@ if (isset($_GET['logout'])) {
 
 $loggedInUser = $_SESSION['user_name'] ?? null;
 $loggedInUserId = $_SESSION['user_id'] ?? null;
-$bookingConfirmation = null;
+$receiptData = null;
 $bookingError = null;
 
 $roomPrices = [
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
     } elseif (!$inDate || !$outDate || $outDate <= $inDate) {
         $bookingError = 'Check-out date must be after check-in date.';
     } elseif ($paymentMethod !== 'Pay at Hotel' && $paymentRef === '') {
-        $bookingError = 'Please enter a payment reference or card details.';
+        $bookingError = 'Please enter your payment reference number or card details.';
     } else {
         $nights = (int) $inDate->diff($outDate)->days;
         $nightlyRate = (float) ($roomPrices[$roomTitle] ?? 0);
@@ -95,16 +95,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
             'payment_status' => $paymentStatus,
         ]);
 
-        $bookingConfirmation = sprintf(
-            "Reservation confirmed for %s (%d night%s)!\nTotal: ₱%s\nMethod: %s (%s)\nRef: %s",
-            $roomTitle,
-            $nights,
-            $nights === 1 ? '' : 's',
-            number_format($totalAmount, 2),
-            $paymentMethod,
-            $paymentStatus,
-            $paymentRef
-        );
+        $bookingId = (int) $pdo->lastInsertId();
+        $receiptData = [
+            'booking_id' => 'HRZ-' . str_pad((string) $bookingId, 5, '0', STR_PAD_LEFT),
+            'guest_name' => $guestName,
+            'room_title' => $roomTitle,
+            'check_in' => $inDate->format('M d, Y'),
+            'check_out' => $outDate->format('M d, Y'),
+            'guests' => $adults . ($children !== 'No Child' ? ', ' . $children : ''),
+            'nights' => $nights,
+            'nightly_rate' => $nightlyRate,
+            'total_amount' => $totalAmount,
+            'payment_method' => $paymentMethod,
+            'payment_reference' => $paymentRef,
+            'payment_status' => $paymentStatus,
+        ];
     }
 }
 ?>
@@ -654,8 +659,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(5px);
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
     z-index: 1000;
     justify-content: center;
     align-items: center;
@@ -674,7 +679,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
     width: 100%;
     max-width: 550px;
     position: relative;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.65);
     max-height: 90vh;
     overflow-y: auto;
   }
@@ -697,19 +702,260 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
 
   .modal-content input, .modal-content select {
     width: 100%;
-    padding: 10px;
-    margin-bottom: 15px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
     border-radius: 8px;
-    border: 1px solid var(--border-dark);
+    border: 1px solid rgba(248, 208, 112, 0.25);
     background: #1a2538;
     color: white;
+    font-size: 14px;
+  }
+
+  .modal-content input:focus, .modal-content select:focus {
+    outline: none;
+    border-color: var(--gold);
   }
 
   .modal-content label {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-muted);
     display: block;
     margin-bottom: 5px;
+  }
+
+  .form-row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* Payment Method Cards */
+  .payment-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .pay-option {
+    background: #1a2538;
+    border: 1.5px solid rgba(248, 208, 112, 0.22);
+    border-radius: 12px;
+    padding: 11px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s ease;
+    text-align: left;
+    color: var(--text-white);
+  }
+
+  .pay-option:hover {
+    border-color: rgba(248, 208, 112, 0.65);
+    transform: translateY(-1px);
+  }
+
+  .pay-option.selected {
+    border-color: var(--gold);
+    background: rgba(248, 208, 112, 0.14);
+    box-shadow: 0 0 0 1px var(--gold);
+  }
+
+  .pay-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .pay-badge.gcash { background: #007dfe; color: #fff; }
+  .pay-badge.maya { background: #10b981; color: #052e16; }
+  .pay-badge.card { background: var(--gold); color: var(--bg-dark); }
+  .pay-badge.hotel { background: #334155; color: var(--gold); }
+
+  .pay-option-text strong {
+    display: block;
+    font-size: 13px;
+    color: var(--text-white);
+  }
+
+  .pay-option-text span {
+    display: block;
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  .payment-box {
+    background: #172133;
+    border: 1px solid rgba(248, 208, 112, 0.3);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+  }
+
+  .payment-box p {
+    font-size: 12px;
+    color: var(--gold);
+    margin-bottom: 8px;
+  }
+
+  .payment-box input {
+    margin-bottom: 0;
+  }
+
+  .summary-card {
+    background: linear-gradient(135deg, #172133, #1d2b44);
+    border: 1px solid rgba(248, 208, 112, 0.4);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  .summary-row.total {
+    border-top: 1px dashed rgba(248, 208, 112, 0.35);
+    padding-top: 8px;
+    margin-top: 6px;
+    margin-bottom: 0;
+    font-size: 17px;
+    font-weight: bold;
+    color: var(--gold);
+  }
+
+  /* Custom Luxury Receipt Modal */
+  .receipt-modal {
+    max-width: 460px;
+    background: linear-gradient(180deg, #142033 0%, #0f1726 100%);
+    border: 2px solid var(--gold);
+    text-align: center;
+  }
+
+  .receipt-icon {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    background: rgba(248, 208, 112, 0.15);
+    border: 2px solid var(--gold);
+    color: var(--gold);
+    font-size: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .receipt-hotel-name {
+    font-size: 12px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 4px;
+  }
+
+  .receipt-subtitle {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 18px;
+  }
+
+  .receipt-ticket {
+    background: #1a263b;
+    border: 1px solid rgba(248, 208, 112, 0.3);
+    border-radius: 14px;
+    padding: 18px;
+    text-align: left;
+    margin-bottom: 18px;
+  }
+
+  .receipt-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    font-size: 13px;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+
+  .receipt-line:last-child {
+    border-bottom: none;
+  }
+
+  .receipt-line span {
+    color: #94a3b8;
+  }
+
+  .receipt-line strong {
+    color: var(--text-white);
+    text-align: right;
+  }
+
+  .status-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .status-pill.paid {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid #10b981;
+  }
+
+  .status-pill.pending {
+    background: rgba(248, 208, 112, 0.18);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+  }
+
+  .receipt-total-bar {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1.5px solid rgba(248, 208, 112, 0.45);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--gold);
+  }
+
+  .receipt-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .btn-secondary-gold {
+    padding: 12px;
+    background: transparent;
+    color: var(--gold);
+    border: 1.5px solid var(--gold);
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 15px;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .btn-secondary-gold:hover {
+    background: rgba(248, 208, 112, 0.15);
   }
 
   .detail-img {
@@ -823,6 +1069,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
   </footer>
 </main>
 
+<!-- Room Detail Modal -->
 <div class="modal-overlay" id="roomDetailModal">
   <div class="modal-content">
     <button class="close-btn" onclick="closeDetailModal()">&times;</button>
@@ -841,70 +1088,175 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
   </div>
 </div>
 
+<!-- Booking & Payment Modal -->
 <div class="modal-overlay" id="bookingModal">
   <div class="modal-content">
     <button class="close-btn" onclick="closeBookingModal()">&times;</button>
     <h2>Book Your Stay</h2>
-    <p id="modalRoomName" style="margin-bottom: 20px; color: #ccc;"></p>
+    <p id="modalRoomName" style="margin-bottom: 16px; color: #ccc; font-size: 14px;"></p>
 
     <form method="POST" action="Hpage.php" id="bookingForm">
       <input type="hidden" name="action" value="book_room">
       <input type="hidden" name="room_title" id="bookingRoomTitle">
+      <input type="hidden" name="payment_method" id="paymentMethodInput" value="GCash">
 
-      <label>Check-in Date</label>
-      <input type="date" name="check_in" id="checkin" required>
-
-      <label>Check-out Date</label>
-      <input type="date" name="check_out" id="checkout" required>
-
-      <label>Adult</label>
-      <select name="adults" id="bookingAdults">
-        <option>1 Adult</option>
-        <option>2 Adults</option>
-        <option>3 Adults</option>
-        <option>4+ Adults</option>
-      </select>
-
-      <label>Child</label>
-      <select name="children" id="bookingChildren">
-        <option>No Child</option>
-        <option>1 Child</option>
-        <option>2 Children</option>
-        <option>3 Children</option>
-        <option>4+ Children</option>
-      </select>
-
-      <div style="background:#1a2538; border:1px solid rgba(248,208,112,0.35); border-radius:10px; padding:12px; margin-bottom:15px; font-size:14px;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#e2e8f0;">
-          <span>Duration:</span>
-          <strong id="summaryNights">0 nights</strong>
+      <div class="form-row-2">
+        <div>
+          <label>Check-in Date</label>
+          <input type="date" name="check_in" id="checkin" required>
         </div>
-        <div style="display:flex; justify-content:space-between; color:var(--gold); font-size:16px;">
-          <span>Total Amount:</span>
-          <strong id="summaryTotal">₱0.00</strong>
+        <div>
+          <label>Check-out Date</label>
+          <input type="date" name="check_out" id="checkout" required>
         </div>
       </div>
 
-      <label>Payment Method</label>
-      <select name="payment_method" id="paymentMethod" required>
-        <option value="GCash">GCash</option>
-        <option value="Maya">Maya</option>
-        <option value="Credit / Debit Card">Credit / Debit Card</option>
-        <option value="Pay at Hotel">Pay at Hotel</option>
-      </select>
-
-      <div id="paymentRefGroup">
-        <p id="paymentHint" style="font-size:12px; color:#f8d070; margin:-8px 0 10px;">
-          Send to Horizon Hotel GCash: 0917-555-0192
-        </p>
-        <label id="paymentRefLabel">Reference Number</label>
-        <input type="text" name="payment_reference" id="paymentReference" placeholder="e.g. 1004928173645">
+      <div class="form-row-2">
+        <div>
+          <label>Adults</label>
+          <select name="adults" id="bookingAdults">
+            <option>1 Adult</option>
+            <option>2 Adults</option>
+            <option>3 Adults</option>
+            <option>4+ Adults</option>
+          </select>
+        </div>
+        <div>
+          <label>Children</label>
+          <select name="children" id="bookingChildren">
+            <option>No Child</option>
+            <option>1 Child</option>
+            <option>2 Children</option>
+            <option>3 Children</option>
+            <option>4+ Children</option>
+          </select>
+        </div>
       </div>
 
-      <button type="submit" class="modal-btn-primary">Confirm Reservation</button>
+      <label>Select Payment Method</label>
+      <div class="payment-grid" id="paymentGrid">
+        <button type="button" class="pay-option selected" data-method="GCash" onclick="selectPaymentMethod('GCash', this)">
+          <span class="pay-badge gcash">G</span>
+          <span class="pay-option-text">
+            <strong>GCash</strong>
+            <span>Instant E-Wallet</span>
+          </span>
+        </button>
+
+        <button type="button" class="pay-option" data-method="Maya" onclick="selectPaymentMethod('Maya', this)">
+          <span class="pay-badge maya">M</span>
+          <span class="pay-option-text">
+            <strong>Maya</strong>
+            <span>Instant E-Wallet</span>
+          </span>
+        </button>
+
+        <button type="button" class="pay-option" data-method="Credit / Debit Card" onclick="selectPaymentMethod('Credit / Debit Card', this)">
+          <span class="pay-badge card">CC</span>
+          <span class="pay-option-text">
+            <strong>Card</strong>
+            <span>Visa / Mastercard</span>
+          </span>
+        </button>
+
+        <button type="button" class="pay-option" data-method="Pay at Hotel" onclick="selectPaymentMethod('Pay at Hotel', this)">
+          <span class="pay-badge hotel">HH</span>
+          <span class="pay-option-text">
+            <strong>Pay at Hotel</strong>
+            <span>Settle at Front Desk</span>
+          </span>
+        </button>
+      </div>
+
+      <div class="payment-box" id="paymentRefGroup">
+        <p id="paymentHint">Send payment to Horizon Hotel GCash: <strong>0917-555-0192</strong></p>
+        <label id="paymentRefLabel">GCash Reference Number</label>
+        <input type="text" name="payment_reference" id="paymentReference" placeholder="e.g. 1004928173645" required>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-row">
+          <span>Nightly Rate</span>
+          <span id="summaryRate">₱0.00</span>
+        </div>
+        <div class="summary-row">
+          <span>Duration</span>
+          <span id="summaryNights">0 nights</span>
+        </div>
+        <div class="summary-row total">
+          <span>Total Amount</span>
+          <span id="summaryTotal">₱0.00</span>
+        </div>
+      </div>
+
+      <button type="submit" class="modal-btn-primary" id="confirmPayBtn">Confirm & Pay Now</button>
     </form>
   </div>
 </div>
+
+<!-- Styled Receipt Modal -->
+<?php if ($receiptData): ?>
+<div class="modal-overlay active" id="receiptModal">
+  <div class="modal-content receipt-modal">
+    <button class="close-btn" onclick="closeReceiptModal()">&times;</button>
+    <div class="receipt-icon">&#10003;</div>
+    <div class="receipt-hotel-name">Horizon Hotel</div>
+    <h2 style="margin-bottom: 4px;">Reservation Confirmed</h2>
+    <p class="receipt-subtitle">Official Booking &amp; Payment Summary</p>
+
+    <div class="receipt-ticket">
+      <div class="receipt-line">
+        <span>Booking Ref</span>
+        <strong><?= htmlspecialchars($receiptData['booking_id']) ?></strong>
+      </div>
+      <div class="receipt-line">
+        <span>Guest Name</span>
+        <strong><?= htmlspecialchars($receiptData['guest_name']) ?></strong>
+      </div>
+      <div class="receipt-line">
+        <span>Suite / Room</span>
+        <strong><?= htmlspecialchars($receiptData['room_title']) ?></strong>
+      </div>
+      <div class="receipt-line">
+        <span>Check-in</span>
+        <strong><?= htmlspecialchars($receiptData['check_in']) ?></strong>
+      </div>
+      <div class="receipt-line">
+        <span>Check-out</span>
+        <strong><?= htmlspecialchars($receiptData['check_out']) ?></strong>
+      </div>
+      <div class="receipt-line">
+        <span>Stay &amp; Guests</span>
+        <strong><?= (int) $receiptData['nights'] ?> night<?= $receiptData['nights'] === 1 ? '' : 's' ?> &bull; <?= htmlspecialchars($receiptData['guests']) ?></strong>
+      </div>
+      <div class="receipt-line">
+        <span>Payment Method</span>
+        <strong><?= htmlspecialchars($receiptData['payment_method']) ?></strong>
+      </div>
+      <div class="receipt-line">
+        <span>Transaction Ref</span>
+        <strong><?= htmlspecialchars($receiptData['payment_reference']) ?></strong>
+      </div>
+      <div class="receipt-line">
+        <span>Payment Status</span>
+        <span class="status-pill <?= $receiptData['payment_status'] === 'Paid' ? 'paid' : 'pending' ?>">
+          <?= htmlspecialchars($receiptData['payment_status']) ?>
+        </span>
+      </div>
+
+      <div class="receipt-total-bar">
+        <span>Total Amount</span>
+        <span>₱<?= number_format((float) $receiptData['total_amount'], 2) ?></span>
+      </div>
+    </div>
+
+    <div class="receipt-actions">
+      <button type="button" class="btn-secondary-gold" onclick="window.print()">Print Receipt</button>
+      <button type="button" class="modal-btn-primary" onclick="closeReceiptModal()">Done</button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 <script>
   const phpUser = <?= json_encode($loggedInUser) ?>;
@@ -1133,15 +1485,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
   const modalRoomName = document.getElementById('modalRoomName');
   const checkinInput = document.getElementById('checkin');
   const checkoutInput = document.getElementById('checkout');
-  const paymentMethodEl = document.getElementById('paymentMethod');
+  const paymentMethodInput = document.getElementById('paymentMethodInput');
   const paymentRefGroup = document.getElementById('paymentRefGroup');
   const paymentHintEl = document.getElementById('paymentHint');
   const paymentRefLabelEl = document.getElementById('paymentRefLabel');
   const paymentRefInput = document.getElementById('paymentReference');
+  const summaryRateEl = document.getElementById('summaryRate');
   const summaryNightsEl = document.getElementById('summaryNights');
   const summaryTotalEl = document.getElementById('summaryTotal');
+  const confirmPayBtn = document.getElementById('confirmPayBtn');
 
   function updateBookingTotal() {
+    summaryRateEl.textContent = '₱' + currentRoomPrice.toLocaleString('en-PH', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+
     if (!checkinInput.value || !checkoutInput.value) {
       summaryNightsEl.textContent = '0 nights';
       summaryTotalEl.textContent = '₱0.00';
@@ -1165,24 +1524,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
     }
   }
 
-  function updatePaymentFields() {
-    const method = paymentMethodEl.value;
+  function selectPaymentMethod(method, btnEl) {
+    paymentMethodInput.value = method;
+
+    document.querySelectorAll('#paymentGrid .pay-option').forEach(btn => {
+      btn.classList.remove('selected');
+    });
+    if (btnEl) {
+      btnEl.classList.add('selected');
+    }
+
     if (method === 'Pay at Hotel') {
       paymentRefGroup.style.display = 'none';
       paymentRefInput.required = false;
       paymentRefInput.value = '';
+      confirmPayBtn.textContent = 'Confirm Reservation';
     } else if (method === 'Credit / Debit Card') {
       paymentRefGroup.style.display = 'block';
-      paymentHintEl.textContent = 'Enter card last 4 digits or approval code for demo checkout.';
-      paymentRefLabelEl.textContent = 'Card Last 4 Digits / Code';
-      paymentRefInput.placeholder = 'e.g. CARD-4821';
+      paymentHintEl.innerHTML = 'Enter card last 4 digits or approval code for demo checkout.';
+      paymentRefLabelEl.textContent = 'Card Last 4 Digits / Approval Code';
+      paymentRefInput.placeholder = 'e.g. VISA-4821';
       paymentRefInput.required = true;
+      confirmPayBtn.textContent = 'Confirm & Pay Now';
     } else {
       paymentRefGroup.style.display = 'block';
-      paymentHintEl.textContent = `Send to Horizon Hotel ${method}: 0917-555-0192`;
+      paymentHintEl.innerHTML = `Send payment to Horizon Hotel ${method}: <strong>0917-555-0192</strong>`;
       paymentRefLabelEl.textContent = `${method} Reference Number`;
       paymentRefInput.placeholder = 'e.g. 1004928173645';
       paymentRefInput.required = true;
+      confirmPayBtn.textContent = 'Confirm & Pay Now';
     }
   }
 
@@ -1191,9 +1561,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
     const foundRoom = rooms.find(r => r.title === roomTitle);
     currentRoomPrice = foundRoom ? foundRoom.price : 0;
 
-    modalRoomName.textContent = `Booking: ${roomTitle} (₱${currentRoomPrice.toLocaleString()} / night)`;
+    modalRoomName.textContent = `${roomTitle} • ₱${currentRoomPrice.toLocaleString()} / night`;
     document.getElementById('bookingRoomTitle').value = roomTitle;
-    updatePaymentFields();
+    const firstPayBtn = document.querySelector('#paymentGrid .pay-option[data-method="GCash"]');
+    selectPaymentMethod('GCash', firstPayBtn);
     updateBookingTotal();
     bookingModal.classList.add('active');
   }
@@ -1202,13 +1573,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
     bookingModal.classList.remove('active');
   }
 
+  function closeReceiptModal() {
+    const receiptModal = document.getElementById('receiptModal');
+    if (receiptModal) {
+      receiptModal.classList.remove('active');
+    }
+  }
+
   checkinInput.addEventListener('change', updateBookingTotal);
   checkoutInput.addEventListener('change', updateBookingTotal);
-  paymentMethodEl.addEventListener('change', updatePaymentFields);
 
-  <?php if ($bookingConfirmation): ?>
-  alert(<?= json_encode($bookingConfirmation) ?>);
-  <?php elseif ($bookingError): ?>
+  <?php if ($bookingError): ?>
   alert(<?= json_encode($bookingError) ?>);
   <?php endif; ?>
 
@@ -1242,6 +1617,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'book_
     }
     if (event.target === bookingModal) {
       closeBookingModal();
+    }
+    const receiptModal = document.getElementById('receiptModal');
+    if (receiptModal && event.target === receiptModal) {
+      closeReceiptModal();
     }
     const userMenu = document.getElementById('userMenu');
     const dropdown = document.getElementById('logoutDropdown');
